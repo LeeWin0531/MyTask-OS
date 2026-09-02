@@ -1,0 +1,564 @@
+/* ═══════════════════════════════════════════════════════════════════
+   MyTask-OS · 工作台视图样式（工单 T04，SPEC §4 界面规格）
+   翻译自 prototype/工作台UI原型.html（变体 D + 主题 obsidian）。
+   规则：
+   - 全部选择器以 .pos-dash（dv.container 内根元素）为作用域，禁止外泄
+   - 全部类名加 pos- 前缀，避免与 Obsidian 主题通用类冲突
+   - 主题 token 取自 SPEC §4.1「曜石 Obsidian」（本文件自带一份，离壳可用）
+   - 背景图由 view.js 用 getResourcePath 写入 .pos-bg-img 的内联样式
+   - 背景三档：data-bgmode="glass | solid | none"（默认 glass，localStorage 记忆）
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── 根：token + 页面底色 ─────────────────────────────────────────── */
+.pos-dash {
+  --pos-bg: #0e0f11;
+  --pos-surface: #16181b;
+  --pos-surface-soft: #1e2126;
+  --pos-surface-green: #1c2126;
+  --pos-border: rgba(255, 255, 255, .08);
+  --pos-border-strong: rgba(255, 255, 255, .22);
+  --pos-primary: #e8e6e1;
+  --pos-primary-dark: #ffffff;
+  --pos-primary-soft: #23262b;
+  --pos-accent-soft: #2a2e34;
+  --pos-text: #e8e6e1;
+  --pos-text-secondary: #9a9c9e;
+  --pos-muted: #5f6165;
+  --pos-tick: #141414;
+  --pos-on-primary: #141414;
+  --pos-radius: 11px;
+  --pos-shadow: 0 6px 18px rgba(0, 0, 0, .4);
+
+  position: relative;
+  isolation: isolate;
+  background: var(--pos-bg);
+  color: var(--pos-text);
+  font-size: 14px;
+  letter-spacing: .015em;
+  -webkit-font-smoothing: antialiased;
+}
+
+.pos-dash,
+.pos-dash *,
+.pos-dash *::before,
+.pos-dash *::after { box-sizing: border-box; }
+
+.pos-dash h1 {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.pos-dash button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.pos-dash input { color: var(--pos-text); }
+.pos-dash input::placeholder { color: var(--pos-muted); }
+
+/* 加载失败兜底（view.js showFatal 渲染的 pre.pos-dash.pos-fatal） */
+pre.pos-dash.pos-fatal {
+  margin: 12px 0;
+  padding: 14px 16px;
+  white-space: pre-wrap;
+  color: var(--pos-text-secondary);
+  background: var(--pos-surface);
+  border: 1px solid var(--pos-border);
+  border-radius: var(--pos-radius);
+}
+
+/* ── 页面背景图两（三）层：图 + 暗化遮罩（SPEC §4.5） ──────────────── */
+.pos-dash .pos-bg-img {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-position: center bottom;
+  background-size: cover;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+.pos-dash .pos-bg-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: linear-gradient(180deg, rgba(14, 15, 17, .88), rgba(14, 15, 17, .72));
+  pointer-events: none;
+}
+.pos-dash[data-bgmode="none"] .pos-bg-img,
+.pos-dash[data-bgmode="none"] .pos-bg-overlay { display: none; }
+.pos-dash[data-bgmode="solid"] .pos-bg-overlay {
+  background: linear-gradient(180deg, rgba(14, 15, 17, .92), rgba(14, 15, 17, .86));
+}
+
+/* 玻璃卡模式：卡片表面半透明 + 背景模糊（参数同原型 data-bgmode="glass"） */
+.pos-dash[data-bgmode="glass"] {
+  --pos-surface: rgba(22, 24, 27, .66);
+  --pos-surface-soft: rgba(30, 33, 38, .55);
+  --pos-surface-green: rgba(28, 33, 38, .6);
+}
+.pos-dash[data-bgmode="glass"] .pos-card,
+.pos-dash[data-bgmode="glass"] .pos-vd-acc,
+.pos-dash[data-bgmode="glass"] .pos-quickcap {
+  backdrop-filter: blur(16px) saturate(1.15);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+}
+
+/* ── 变体 D 布局骨架 ──────────────────────────────────────────────── */
+.pos-dash .pos-vd {
+  position: relative;
+  z-index: 1;
+  padding: 22px 26px 30px;
+  display: flex;
+  flex-direction: column;
+  /* 上区占满折叠条以外可用高度（SPEC §3.2：自适应视口，不设固定像素） */
+  min-height: calc(100vh - 110px);
+}
+
+.pos-dash .pos-vd-top {
+  display: flex;
+  align-items: flex-end;
+  margin-bottom: 14px;
+  gap: 16px;
+}
+.pos-dash .pos-vd-greet h1 {
+  font-size: 24px;
+  line-height: 1.25;
+  letter-spacing: .03em;
+  color: var(--pos-text);
+}
+.pos-dash .pos-vd-sub {
+  color: var(--pos-text-secondary);
+  margin-top: 3px;
+  font-size: 13px;
+}
+.pos-dash .pos-vd-top .pos-cal {
+  margin-left: auto;
+  width: 280px;
+  flex: 0 0 auto;
+}
+
+/* ── 卡片 / 分区卡 ────────────────────────────────────────────────── */
+.pos-dash .pos-card {
+  background: var(--pos-surface);
+  border: 1px solid var(--pos-border);
+  border-radius: var(--pos-radius);
+  box-shadow: var(--pos-shadow);
+}
+
+.pos-dash .pos-zone {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 220px;
+}
+.pos-dash .pos-zone-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--pos-border);
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: .05em;
+}
+.pos-dash .pos-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pos-primary);
+  flex: 0 0 auto;
+}
+.pos-dash .pos-cnt {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--pos-text-secondary);
+  background: var(--pos-surface-soft);
+  border-radius: 999px;
+  padding: 1px 8px;
+  letter-spacing: .03em;
+}
+.pos-dash .pos-zone-body {
+  padding: 8px 10px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 60px;
+}
+.pos-dash .pos-zone-foot {
+  padding: 8px 10px;
+  border-top: 1px dashed var(--pos-border);
+}
+.pos-dash .pos-arch-hint {
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--pos-muted);
+}
+
+/* 2×2 上区网格：行高 minmax(220px, 1fr)，随视口伸展、卡内滚动 */
+.pos-dash .pos-vd-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-auto-rows: minmax(220px, 1fr);
+  gap: 14px;
+  margin-top: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ── 任务行 ───────────────────────────────────────────────────────── */
+.pos-dash .pos-task {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  cursor: grab;
+  user-select: none;
+  background: transparent;
+  border: 1px solid transparent;
+  transition: background .12s, border-color .12s;
+}
+.pos-dash .pos-task:hover {
+  background: var(--pos-surface-soft);
+  border-color: var(--pos-border);
+}
+.pos-dash .pos-task.pos-dragging { opacity: .35; }
+.pos-dash .pos-task.pos-ins-before { box-shadow: inset 0 3px 0 var(--pos-primary); }
+.pos-dash .pos-task.pos-ins-after { box-shadow: inset 0 -3px 0 var(--pos-primary); }
+.pos-dash .pos-task.pos-nest-ok {
+  background: var(--pos-accent-soft);
+  outline: 1.5px dashed var(--pos-primary);
+  outline-offset: -2px;
+}
+
+.pos-dash .pos-cb {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border-radius: 5px;
+  border: 1.6px solid var(--pos-border-strong);
+  background: var(--pos-surface);
+  cursor: pointer;
+  position: relative;
+  transition: all .12s;
+}
+.pos-dash .pos-cb:hover { border-color: var(--pos-primary); }
+.pos-dash .pos-cb.pos-on {
+  background: var(--pos-primary);
+  border-color: var(--pos-primary);
+}
+.pos-dash .pos-cb.pos-on::after {
+  content: "";
+  position: absolute;
+  left: 4.5px;
+  top: 1.5px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--pos-tick);
+  border-width: 0 2px 2px 0;
+  transform: rotate(42deg);
+}
+.pos-dash .pos-cb.pos-locked {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.pos-dash .pos-tx {
+  flex: 1;
+  line-height: 1.45;
+  word-break: break-all;   /* 超长标题折行（SPEC §7 终审项） */
+}
+.pos-dash .pos-task.pos-done .pos-tx {
+  color: var(--pos-muted);
+  text-decoration: line-through;
+}
+
+.pos-dash .pos-td-date {
+  font-size: 10.5px;
+  color: var(--pos-muted);
+  background: var(--pos-surface-soft);
+  padding: 1px 6px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+.pos-dash .pos-caret {
+  cursor: pointer;
+  color: var(--pos-muted);
+  font-size: 9px;
+  width: 12px;
+  flex: 0 0 12px;
+  user-select: none;
+}
+.pos-dash .pos-subplus {
+  opacity: 0;
+  font-size: 10.5px;
+  color: var(--pos-primary-dark);
+  background: var(--pos-primary-soft);
+  border-radius: 999px;
+  padding: 2px 8px;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: opacity .12s;
+  user-select: none;
+}
+.pos-dash .pos-task:hover .pos-subplus { opacity: 1; }
+.pos-dash .pos-prog {
+  font-size: 10.5px;
+  color: var(--pos-primary-dark);
+  background: var(--pos-accent-soft);
+  border-radius: 999px;
+  padding: 1px 7px;
+  flex: 0 0 auto;
+}
+
+.pos-dash .pos-subs {
+  margin: 1px 0 4px 26px;
+  border-left: 2px solid var(--pos-border);
+  padding-left: 6px;
+}
+.pos-dash .pos-task.pos-sub {
+  padding: 5px 6px;
+  font-size: 13px;
+}
+.pos-dash .pos-cb.pos-sm {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  border-radius: 4px;
+}
+.pos-dash .pos-cb.pos-sm.pos-on::after {
+  left: 3px;
+  top: 1px;
+  width: 3px;
+  height: 7px;
+  border-width: 0 1.6px 1.6px 0;
+}
+
+.pos-dash .pos-empty {
+  color: var(--pos-muted);
+  font-size: 12.5px;
+  text-align: center;
+  padding: 22px 8px;
+  border: 1.5px dashed var(--pos-border);
+  border-radius: 9px;
+}
+.pos-dash .pos-empty-inset { margin: 8px; }
+
+/* 分区容器整体高亮（拖拽悬停） */
+.pos-dash [data-zone].pos-over {
+  background: var(--pos-primary-soft);
+  outline: 2px dashed var(--pos-primary);
+  outline-offset: -4px;
+}
+
+/* ── 新增按钮 / 输入 ──────────────────────────────────────────────── */
+.pos-dash .pos-add-btn {
+  width: 100%;
+  padding: 6px;
+  border: none;
+  background: transparent;
+  color: var(--pos-text-secondary);
+  font-size: 12.5px;
+  border-radius: 7px;
+}
+.pos-dash .pos-add-btn:hover {
+  background: var(--pos-surface-green);
+  color: var(--pos-primary-dark);
+}
+.pos-dash .pos-add-input {
+  width: 100%;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  border: 1.5px solid var(--pos-primary);
+  border-radius: 8px;
+  outline: none;
+  background: var(--pos-surface);
+}
+
+/* ── 月历（周一起始、今天实心圆） ─────────────────────────────────── */
+.pos-dash .pos-cal-head {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px 6px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.pos-dash .pos-cal-nav {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+.pos-dash .pos-cal-nav button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--pos-border);
+  border-radius: 6px;
+  background: var(--pos-surface);
+  color: var(--pos-text-secondary);
+  font-size: 12px;
+  line-height: 1;
+}
+.pos-dash .pos-cal-nav button:hover {
+  background: var(--pos-surface-green);
+  color: var(--pos-text);
+}
+/* 背景三档切换小按钮（页头月历附近，SPEC §4.5） */
+.pos-dash .pos-cal-nav .pos-bg-btn {
+  width: auto;
+  padding: 0 7px;
+  font-size: 10.5px;
+  letter-spacing: .05em;
+}
+.pos-dash .pos-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-auto-rows: 24px;   /* 固定行高：防御全局片段中的同名类规则（如旧版 .pos-today）把格子撑高 */
+  gap: 2px;
+  padding: 4px 10px 10px;
+}
+.pos-dash .pos-cal-grid .pos-wd {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.5px;
+  color: var(--pos-muted);
+}
+.pos-dash .pos-cal-grid .pos-day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0;
+  font-size: 11.5px;
+  border-radius: 7px;
+  color: var(--pos-text-secondary);
+}
+.pos-dash .pos-cal-grid .pos-day.pos-dim { opacity: .32; }
+.pos-dash .pos-cal-grid .pos-day.pos-day-now {
+  background: var(--pos-primary);
+  color: var(--pos-on-primary);
+  font-weight: 700;
+}
+
+/* ── 速记条（surface-green 底） ───────────────────────────────────── */
+.pos-dash .pos-quickcap {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  background: var(--pos-surface-green);
+  border: 1px solid var(--pos-border);
+  border-radius: var(--pos-radius);
+}
+.pos-dash .pos-quickcap input {
+  flex: 1;
+  min-width: 0;
+  border: 1.5px solid transparent;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13.5px;
+  font-family: inherit;
+  outline: none;
+  background: var(--pos-surface);
+}
+.pos-dash .pos-quickcap input:focus { border-color: var(--pos-primary); }
+.pos-dash .pos-cap-go {
+  border: none;
+  background: var(--pos-primary);
+  color: var(--pos-on-primary);
+  border-radius: 8px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ── 底部「未安排 | 已完成」折叠条 ──────────────────────────────────── */
+.pos-dash .pos-vd-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 14px;
+  align-items: start;
+}
+.pos-dash .pos-vd-acc {
+  background: var(--pos-surface);
+  border: 1px solid var(--pos-border);
+  border-radius: var(--pos-radius);
+  overflow: hidden;
+}
+.pos-dash .pos-vd-acc-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: .05em;
+  user-select: none;
+}
+.pos-dash .pos-vd-acc-head:hover { background: var(--pos-surface-soft); }
+.pos-dash .pos-vd-acc-head .pos-cnt {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--pos-text-secondary);
+  background: var(--pos-surface-soft);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.pos-dash .pos-arrow {
+  color: var(--pos-muted);
+  font-size: 11px;
+  transition: transform .15s;
+}
+.pos-dash .pos-vd-acc.pos-open .pos-arrow { transform: rotate(90deg); }
+.pos-dash .pos-vd-acc-body {
+  display: none;
+  border-top: 1px solid var(--pos-border);
+  max-height: 300px;
+  overflow-y: auto;
+}
+.pos-dash .pos-vd-acc.pos-open .pos-vd-acc-body { display: block; }
+
+/* ── toast：容器内绝对定位胶囊 ────────────────────────────────────── */
+.pos-dash .pos-toast {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  background: var(--pos-primary);
+  color: var(--pos-on-primary);
+  padding: 8px 18px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .25s;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .4);
+  white-space: nowrap;
+}
+.pos-dash .pos-toast.pos-show { opacity: 1; }
+
+/* ── 窄窗格兜底（Obsidian 侧边窗格打开工作台时） ──────────────────── */
+@media (max-width: 860px) {
+  .pos-dash .pos-vd-top { flex-wrap: wrap; }
+  .pos-dash .pos-vd-top .pos-cal { margin-left: 0; }
+  .pos-dash .pos-vd-grid,
+  .pos-dash .pos-vd-bottom { grid-template-columns: 1fr; }
+  .pos-dash .pos-vd-grid { grid-auto-rows: minmax(200px, auto); }
+}
+
+
+/* ── 页面铺满：含工作台视图的页面放开 Obsidian 可读行宽 ───────────── */
+.markdown-preview-sizer:has(.pos-dash),
+.markdown-source-view:has(.pos-dash) {
+  max-width: none !important;
+  width: 100% !important;
+}
+.markdown-preview-sizer:has(.pos-dash) .block-language-dataviewjs {
+  max-width: none !important;
+}

@@ -303,6 +303,25 @@ pre.pos-dash.pos-fatal {
   user-select: none;
 }
 .pos-dash .pos-task:hover .pos-subplus { opacity: 1; }
+.pos-dash .pos-del {
+  opacity: 0;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--pos-muted);
+  padding: 2px 7px;
+  border-radius: 999px;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: opacity .12s, color .12s, background .12s;
+  user-select: none;
+}
+.pos-dash .pos-del:hover {
+  color: #e08a7a;
+  background: rgba(224, 138, 122, .12);
+}
+.pos-dash .pos-task:hover .pos-del,
+.pos-dash .pos-del:focus { opacity: 1; }
+.pos-dash .pos-del-sm { font-size: 12px; padding: 1px 6px; }
 .pos-dash .pos-prog {
   font-size: 10.5px;
   color: var(--pos-primary-dark);

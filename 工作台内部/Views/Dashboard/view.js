@@ -185,8 +185,9 @@
             ? '<span class="pos-caret" data-fold="' + esc(task.id) + '">' + (collapsed.has(foldKey(zoneId, task)) ? "▶" : "▼") + "</span>"
             : "";
         const plus = '<span class="pos-subplus" data-addsub="' + esc(task.id) + '" title="添加子任务">＋子任务</span>';
+        const del = '<span class="pos-del" data-deltask="' + esc(task.id) + '" title="删除任务">×</span>';
         let html = '<div class="pos-task' + (task.done ? " pos-done" : "") + '" draggable="true" data-drag="' + esc(task.id) + '">'
-            + caret + cb + '<span class="pos-tx">' + esc(task.text) + "</span>" + prog + date + plus + "</div>";
+            + caret + cb + '<span class="pos-tx">' + esc(task.text) + "</span>" + prog + date + plus + del + "</div>";
         if (task.subs.length && !collapsed.has(foldKey(zoneId, task))) {
             html += '<div class="pos-subs">' + task.subs.map(s => subRow(task, s, inDone)).join("") + "</div>";
         }
@@ -200,7 +201,8 @@
             ? '<span class="pos-td-date" title="完成于 ' + esc(sub.doneDate) + '">✅ ' + (inDone ? esc(sub.doneDate) : esc(sub.doneDate.slice(5))) + "</span>"
             : "";
         return '<div class="pos-task pos-sub' + (sub.done ? " pos-done" : "") + '" draggable="true" data-drag="' + esc(task.id + "/" + sub.id) + '">'
-            + cb + '<span class="pos-tx">' + esc(sub.text) + "</span>" + date + "</div>";
+            + cb + '<span class="pos-tx">' + esc(sub.text) + "</span>" + date
+            + '<span class="pos-del pos-del-sm" data-delsub="' + esc(task.id + "/" + sub.id) + '" title="删除子任务">×</span>' + "</div>";
     }
 
     /** 分区列表体：空状态文案（已完成区专属文案）；data-zone 供拖拽空白落点 */
@@ -313,6 +315,35 @@
         else { sub.done = false; sub.doneDate = null; }
         commit([hit.zone]);
         render();
+    }
+
+    /** 删除顶级任务（连同其整棵子树），直接写盘；不可恢复 */
+    function deleteTask(id) {
+        const hit = findTask(id);
+        if (!hit) return;
+        const list = state.zones[hit.zone];
+        const idx = list.indexOf(hit.task);
+        if (idx < 0) return;
+        list.splice(idx, 1);
+        collapsed.delete(foldKey(hit.zone, hit.task));   // 折叠记忆键随任务一并清掉
+        commit([hit.zone]);
+        render();
+        toast("已删除任务");
+    }
+
+    /** 删除单个子任务，直接写盘；不可恢复 */
+    function deleteSub(val) {
+        const slash = val.indexOf("/");
+        if (slash < 0) return;
+        const hit = findTask(val.slice(0, slash));
+        if (!hit) return;
+        const sid = val.slice(slash + 1);
+        const idx = hit.task.subs.findIndex(s => s.id === sid);
+        if (idx < 0) return;
+        hit.task.subs.splice(idx, 1);
+        commit([hit.zone]);
+        render();
+        toast("已删除子任务");
     }
 
     /** 速记条：Enter / 按钮 → 追加到未安排末尾 + toast（SPEC §3.1） */
@@ -473,6 +504,10 @@
             if (checkSub) { toggleSub(checkSub.dataset.checksub); return; }
             const check = closestEl(e.target, "[data-check]");
             if (check) { toggleTask(check.dataset.check); return; }
+            const delSub = closestEl(e.target, "[data-delsub]");
+            if (delSub) { deleteSub(delSub.dataset.delsub); return; }
+            const delTask = closestEl(e.target, "[data-deltask]");
+            if (delTask) { deleteTask(delTask.dataset.deltask); return; }
             const fold = closestEl(e.target, "[data-fold]");
             if (fold) {
                 const hit = findTask(fold.dataset.fold);

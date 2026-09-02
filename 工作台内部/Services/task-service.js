@@ -27,12 +27,12 @@
      *  使项目文件夹在 Vault 内可改名、可放任意深度（拷入主 Vault 即用）。 */
     const ROOT_PREFIX = io && typeof io.root === "string" ? io.root : "";
     const ZONES = [
-        { id: "today",   file: "内部/01 Tasks/今日任务.md", name: "今日任务" },
-        { id: "temp",    file: "内部/01 Tasks/临时任务.md", name: "临时任务" },
-        { id: "near",    file: "内部/01 Tasks/近期任务.md", name: "近期任务" },
-        { id: "long",    file: "内部/01 Tasks/长期任务.md", name: "长期任务" },
-        { id: "someday", file: "内部/01 Tasks/未安排.md",   name: "未安排" },
-        { id: "done",    file: "内部/01 Tasks/已完成.md",   name: "已完成" }
+        { id: "today",   file: "工作台内部/01 Tasks/今日任务.md", name: "今日任务" },
+        { id: "temp",    file: "工作台内部/01 Tasks/临时任务.md", name: "临时任务" },
+        { id: "near",    file: "工作台内部/01 Tasks/近期任务.md", name: "近期任务" },
+        { id: "long",    file: "工作台内部/01 Tasks/长期任务.md", name: "长期任务" },
+        { id: "someday", file: "工作台内部/01 Tasks/未安排.md",   name: "未安排" },
+        { id: "done",    file: "工作台内部/01 Tasks/已完成.md",   name: "已完成" }
     ].map(zone => Object.freeze({
         ...zone,
         path: ROOT_PREFIX + zone.file      // 视图/调用方使用的实际读写路径

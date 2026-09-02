@@ -10,7 +10,7 @@
    按 Obsidian 环境适配（SPEC §3、§4、§5.2）：
    - 作用域：只控制 dv.container；状态类挂在根元素 .pos-dash，样式/查询不出容器
    - 命名空间：全部类名加 pos- 前缀，避免与主题通用类（.card/.task/.zone/.cb）冲突
-   - 数据层：内部/Services/task-service.js（new Function 工厂 + vault adapter io）
+   - 数据层：工作台内部/Services/task-service.js（new Function 工厂 + vault adapter io）
    - 会话事实源：内存 state；每次变更后 saveZone 入队写盘，再本地重渲染
    - 页面每次执行（打开/切回/Dataview 自动刷新重跑）先 loadAll 重读文件（手编即生效），
      再清扫、再首渲染；页内重渲染（root.innerHTML 重建）不重跑清扫
@@ -26,7 +26,7 @@
 
     /* 项目根自定位特征文件：工作台.md 无论放在 Vault 哪一层（含被拷入主 Vault
        当子文件夹），启动时在 Vault 内反查此文件，定位项目根。 */
-    const ANCHOR_FILE = "内部/Services/task-service.js";
+    const ANCHOR_FILE = "工作台内部/Services/task-service.js";
     const BG_MODES = ["glass", "solid", "none"];                    // 玻璃 → 实卡 → 关
     const BG_NAMES = { glass: "玻璃", solid: "实卡", none: "关" };
     const BG_STORAGE_KEY = "mytaskos-bgmode";
@@ -659,7 +659,7 @@
         state = { zones: await svc.loadAll() };
 
         /* 背景图：不能用 CSS 相对路径，取 app:// 资源 URL */
-        try { heroUrl = app.vault.adapter.getResourcePath(join("内部/Assets/Hero/hero.jpg")); } catch (_) { heroUrl = ""; }
+        try { heroUrl = app.vault.adapter.getResourcePath(join("工作台内部/Assets/Hero/hero.jpg")); } catch (_) { heroUrl = ""; }
         bgmode = readBgmode();
 
         /* 根元素：清理同容器旧根（防自动刷新叠加）；dv.view 注入的 <style> 不受影响 */
@@ -671,11 +671,11 @@
         root.dataset.bgmode = bgmode;
         dv.container.appendChild(root);
 
-        /* 样式随包注入：项目自带完整设计系统（内部/Styles/dashboard.css），
+        /* 样式随包注入：项目自带完整设计系统（工作台内部/Styles/dashboard.css），
            主 Vault 无需配置 css snippet——拷入即用。
            每执行注入一次（id 去重），替换旧版以同步改动。 */
         try {
-            const themeCss = await app.vault.adapter.read(join("内部/Styles/dashboard.css"));
+            const themeCss = await app.vault.adapter.read(join("工作台内部/Styles/dashboard.css"));
             const STYLE_ID = "mytaskos-dashboard-theme";
             const old = document.getElementById(STYLE_ID);
             if (old) old.remove();

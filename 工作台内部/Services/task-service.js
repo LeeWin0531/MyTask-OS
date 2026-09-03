@@ -42,8 +42,14 @@
     const CHECKBOX_LINE = /^\s*[-*+]\s+\[([ xX])\]\s+(.*)$/;
     /** 行尾 ✅ 完成日期后缀（日期允许缺失，容忍手编脏数据） */
     const DONE_SUFFIX = /\s*✅\s*(\d{4}-\d{2}-\d{2})?\s*$/;
+    /** 文中 📅 截止日期标记（Obsidian Tasks 通用语法；允许全角空格混排） */
+    const DUE_MARK = /\s*📅\s*(\d{4}-\d{2}-\d{2})?/;
     const DATE_SHAPE = /^\d{4}-\d{2}-\d{2}$/;
     const SUB_INDENT = "    ";
+    /** 日历备注文件（非任务文字，与六分区数据隔离） */
+    const MEMO_FILE = "工作台内部/01 Tasks/日历备注.md";
+    /** 备注行：`- YYYY-MM-DD 备注文字` */
+    const MEMO_LINE = /^\s*[-*+]\s+(\d{4}-\d{2}-\d{2})\s+(.+)$/;
 
     /** 串行写入队列：Promise 链防并发（同 Personal-OS 思路） */
     let writeQueue = Promise.resolve();
@@ -80,6 +86,19 @@
     }
 
     /**
+     * 剥离文中 📅 截止日期标记，返回 { text, dueDate }。
+     * 日期非法/缺失时标记一并丢弃（视为无截止）；先剥 ✅ 再剥 📅（✅ 在行尾更靠后）。
+     */
+    function stripDueMark(raw) {
+        const source = String(raw ?? "");
+        const match = source.match(DUE_MARK);
+        if (!match) return { text: source, dueDate: null };
+        const dueDate = match[1] && DATE_SHAPE.test(match[1]) ? match[1] : null;
+        const text = normalizeText(source.slice(0, match.index) + " " + source.slice(match.index + match[0].length));
+        return { text, dueDate };
+    }
+
+    /**
      * 解析单个分区文本 → Task[]。
      * - 只认复选框行；非复选框行/空行忽略；空文字（空标题）拒绝
      * - 缩进 >0 的行归入其上方最近的顶级任务的 subs（再深的缩进拍平为一级）
@@ -91,16 +110,18 @@
         for (const line of String(text ?? "").split(/\r\n|\r|\n/)) {
             const match = line.match(CHECKBOX_LINE);
             if (!match) continue;
-            const { text: itemText, doneDate } = stripDoneSuffix(match[2]);
+            const afterDone = stripDoneSuffix(match[2]);
+            const { text: itemText, dueDate } = stripDueMark(afterDone.text);
             if (!itemText) continue;
+            const doneDate = afterDone.doneDate;
             const done = match[1].toLowerCase() === "x";
             const indent = (line.match(/^[ \t]*/) || [""])[0].length;
             if (indent > 0) {
-                const sub = { id: taskId(), text: itemText, done, doneDate: done ? doneDate : null };
+                const sub = { id: taskId(), text: itemText, done, doneDate: done ? doneDate : null, dueDate };
                 if (current) current.subs.push(sub);
                 else tasks.push({ ...sub, subs: [] }); // 孤儿子行容错升级为顶级，须补齐 subs
             } else {
-                const task = { id: taskId(), text: itemText, done, doneDate: done ? doneDate : null, subs: [] };
+                const task = { id: taskId(), text: itemText, done, doneDate: done ? doneDate : null, dueDate, subs: [] };
                 tasks.push(task);
                 current = task;
             }
@@ -108,16 +129,18 @@
         return tasks;
     }
 
-    /** 单行序列化；空标题拒绝（返回 null），完成日期仅在勾选且格式合法时写入 */
+    /** 单行序列化；空标题拒绝（返回 null）；📅 截止与 ✅ 完成日期按固定次序拼行尾 */
     function itemLine(item, indent) {
         const text = normalizeText(item && item.text);
         if (!text) return null;
         const done = Boolean(item && item.done);
         const rawDate = item ? item.doneDate : null;
+        const rawDue = item ? item.dueDate : null;
+        const dueSuffix = rawDue && DATE_SHAPE.test(rawDue) ? ` 📅 ${rawDue}` : "";
         const dateSuffix = done && typeof rawDate === "string" && DATE_SHAPE.test(rawDate)
             ? ` ✅ ${rawDate}`
             : "";
-        return `${indent}- [${done ? "x" : " "}] ${text}${dateSuffix}`;
+        return `${indent}- [${done ? "x" : " "}] ${text}${dueSuffix}${dateSuffix}`;
     }
 
     /**
@@ -192,6 +215,57 @@
         await Promise.all(writes);
     }
 
+    /* ── 日历备注（Memo）：独立文件，与六分区任务数据完全隔离 ──────── */
+
+    const memoPath = () => (ROOT_PREFIX || "") + MEMO_FILE;
+
+    /** 备注行序列化：`- YYYY-MM-DD 文字`；空文字拒绝 */
+    function memoLine(memo) {
+        const date = memo && memo.date;
+        const text = normalizeText(memo && memo.text);
+        if (!date || !DATE_SHAPE.test(date) || !text) return null;
+        return `- ${date} ${text}`;
+    }
+
+    /** 解析备注文件文本 → [{ id, date, text }]；非备注行忽略；同名重复行各自独立 */
+    function parseMemos(text) {
+        const memos = [];
+        for (const line of String(text ?? "").split(/\r\n|\r|\n/)) {
+            const match = line.match(MEMO_LINE);
+            if (!match) continue;
+            const trimmed = normalizeText(match[2]);
+            if (!trimmed) continue;
+            memos.push({ id: taskId(), date: match[1], text: trimmed });
+        }
+        return memos;
+    }
+
+    /** 序列化备注列表 → 文件文本（按日期升序，同日按文字稳定排序） */
+    function serializeMemos(memos) {
+        const lines = (Array.isArray(memos) ? memos : [])
+            .map(memoLine)
+            .filter(Boolean);
+        lines.sort((a, b) => a.localeCompare(b));
+        return lines.length ? `${lines.join("\n")}\n` : "";
+    }
+
+    /** 读全部备注；文件缺失按空处理（首次使用零配置） */
+    async function loadMemos() {
+        try {
+            const content = await io.read(memoPath());
+            return parseMemos(typeof content === "string" ? content : "");
+        } catch (error) {
+            return [];
+        }
+    }
+
+    /** 整文件重写备注（经串行写入队列） */
+    function saveMemos(memos) {
+        return enqueue(async () => {
+            await io.write(memoPath(), serializeMemos(memos));
+        });
+    }
+
     return Object.freeze({
         ZONES,
         taskId,
@@ -199,6 +273,10 @@
         serializeZone,
         loadAll,
         saveZone,
-        saveAll
+        saveAll,
+        parseMemos,
+        serializeMemos,
+        loadMemos,
+        saveMemos
     });
 })

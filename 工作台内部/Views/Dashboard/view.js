@@ -64,12 +64,13 @@
     /* ── 模块级可变状态（本页面每次执行重置；UI 状态走 window 会话缓存） ── */
 
     let svc = null;         // task-service 工厂实例
-    let state = null;       // { zones: { today, temp, near, long, someday, done } }，会话内事实源
+    let state = null;       // { zones: {…}, memos: [{id,date,text}] }，会话内事实源
     let root = null;        // .pos-dash 根元素（本执行内持久；重渲染只重建其 innerHTML）
     let heroUrl = "";       // 背景图 app:// URL
     let bgmode = "glass";   // 背景三档（localStorage 记忆）
     let dragVal = null;     // 当前拖拽项："taskId" 或 "taskId/subId"（原型 dragVal）
     let dropSpec = null;    // dragover 实时计算的落点（原型 dropSpec）
+    let memoEditing = null; // 正在输入备注的日期 "YYYY-MM-DD"（纯 UI 态，重渲染即消失）
 
     /**
      * UI 会话缓存：Dataview refreshEnabled（默认开，2500ms）会在索引变更
@@ -167,7 +168,20 @@
     /* ── 渲染片段（翻译自原型 taskRow / subRow / zoneBody / zoneFoot / zoneCardHTML） ── */
 
     /**
-     * 顶级任务行：caret（▼折叠）+ 复选框 + 标题 + n/m 进度签 + ✅ 日期 + ＋子任务。
+     * 截止日期芯片：有 📅 时展示（点击清除，过期红色）；没有时悬停出现「日」设置钮。
+     * dragId 兼容顶级（"taskId"）与子任务（"taskId/subId"）。
+     */
+    function dueChip(dragId, item) {
+        if (item.dueDate) {
+            const overdue = !item.done && item.dueDate < TODAY;
+            return '<span class="pos-due-chip' + (overdue ? " pos-due-over" : "") + '" data-dueclear="' + esc(dragId)
+                + '" title="截止 ' + esc(item.dueDate) + '（点击清除）">📅 ' + esc(item.dueDate.slice(5)) + "</span>";
+        }
+        return '<span class="pos-dueset" data-dueset="' + esc(dragId) + '" title="设置截止日期">📅+</span>';
+    }
+
+    /**
+     * 顶级任务行：caret（▼折叠）+ 复选框 + 标题 + n/m 进度签 + 📅 截止 + ✅ 日期 + ＋子任务。
      * 计数/进度只按数据本身；已完成区复选框锁定（只进不出）。
      */
     function taskRow(task, zoneId) {
@@ -186,8 +200,9 @@
             : "";
         const plus = '<span class="pos-subplus" data-addsub="' + esc(task.id) + '" title="添加子任务">＋子任务</span>';
         const del = '<span class="pos-del" data-deltask="' + esc(task.id) + '" title="删除任务">×</span>';
+        const due = inDone ? "" : dueChip(task.id, task);
         let html = '<div class="pos-task' + (task.done ? " pos-done" : "") + '" draggable="true" data-drag="' + esc(task.id) + '">'
-            + caret + cb + '<span class="pos-tx">' + esc(task.text) + "</span>" + prog + date + plus + del + "</div>";
+            + caret + cb + '<span class="pos-tx">' + esc(task.text) + "</span>" + prog + due + date + plus + del + "</div>";
         if (task.subs.length && !collapsed.has(foldKey(zoneId, task))) {
             html += '<div class="pos-subs">' + task.subs.map(s => subRow(task, s, inDone)).join("") + "</div>";
         }
@@ -200,8 +215,9 @@
         const date = sub.done && sub.doneDate
             ? '<span class="pos-td-date" title="完成于 ' + esc(sub.doneDate) + '">✅ ' + (inDone ? esc(sub.doneDate) : esc(sub.doneDate.slice(5))) + "</span>"
             : "";
+        const due = inDone ? "" : dueChip(task.id + "/" + sub.id, sub);
         return '<div class="pos-task pos-sub' + (sub.done ? " pos-done" : "") + '" draggable="true" data-drag="' + esc(task.id + "/" + sub.id) + '">'
-            + cb + '<span class="pos-tx">' + esc(sub.text) + "</span>" + date
+            + cb + '<span class="pos-tx">' + esc(sub.text) + "</span>" + due + date
             + '<span class="pos-del pos-del-sm" data-delsub="' + esc(task.id + "/" + sub.id) + '" title="删除子任务">×</span>' + "</div>";
     }
 
@@ -244,7 +260,37 @@
             + '<div class="pos-vd-acc-body pos-zone-drop" data-zone="' + zoneId + '">' + inner + zoneFootHTML(zoneId) + "</div></div>";
     }
 
-    /** 紧凑月历：周一起始、今天高亮、‹ › 翻月；纯展示不含任务数据（SPEC §3.1） */
+    /** 某月某日的 "YYYY-MM-DD" */
+    const dayKey = (y, m, d) => y + "-" + pad2(m + 1) + "-" + pad2(d);
+
+    /** 收集某日期的事件：未完成截止任务（全分区）+ 备注 */
+    function eventsOn(dateStr) {
+        const ev = [];
+        for (const zone of svc.ZONES) {
+            if (zone.id === "done") continue;
+            for (const t of (state.zones[zone.id] || [])) {
+                if (!t.done && t.dueDate === dateStr) ev.push({ kind: "due" });
+                for (const s of (t.subs || [])) {
+                    if (!s.done && s.dueDate === dateStr) ev.push({ kind: "due" });
+                }
+            }
+        }
+        if ((state.memos || []).some(m => m.date === dateStr)) ev.push({ kind: "memo" });
+        return ev;
+    }
+
+    /** 月历格子角标：有未完成截止任务 = 主色点；仅有备注 = 弱色点 */
+    function dayDot(dateStr) {
+        const ev = eventsOn(dateStr);
+        if (!ev.length) return "";
+        const hasDue = ev.some(x => x.kind === "due");
+        return '<i class="pos-dot-mark' + (hasDue ? " pos-dot-due" : " pos-dot-memo") + '"></i>';
+    }
+
+    /**
+     * 紧凑月历：周一起始、今天高亮、‹ › 翻月；格子角标提示当日事件；
+     * 双击日期格 = 添加该日备注（SPEC §3.1 增补：日历事件层）
+     */
     function calendarHTML() {
         const now = new Date();
         if (!UI.cal) UI.cal = { y: now.getFullYear(), m: now.getMonth() };
@@ -257,7 +303,9 @@
         for (let i = 0; i < offset; i++) cells += '<span class="pos-day pos-dim"></span>';
         for (let d = 1; d <= days; d++) {
             const isToday = y === now.getFullYear() && m === now.getMonth() && d === now.getDate();
-            cells += '<span class="pos-day' + (isToday ? " pos-day-now" : "") + '">' + d + "</span>";
+            const dk = dayKey(y, m, d);
+            cells += '<span class="pos-day' + (isToday ? " pos-day-now" : "")
+                + '" data-day="' + dk + '" title="双击添加备注">' + d + dayDot(dk) + "</span>";
         }
         return '<div class="pos-cal-head">' + (y + " 年 " + (m + 1) + " 月")
             + '<span class="pos-cal-nav">'
@@ -265,7 +313,66 @@
             + '<button data-cal="next" title="下个月">›</button>'
             + '<button class="pos-bg-btn" data-bgtoggle title="背景模式：玻璃 → 实卡 → 关（当前：' + BG_NAMES[bgmode] + '）">' + BG_NAMES[bgmode] + "</button>"
             + "</span></div>"
-            + '<div class="pos-cal-grid">' + cells + "</div>";
+            + '<div class="pos-cal-grid">' + cells + "</div>"
+            + calEventsHTML(y, m);
+    }
+
+    /** 截止任务收集：未完成且截止日属于所查看月份；子任务带父任务文字 */
+    function collectDue(out, item, date, zoneId, prefix, parent) {
+        if (!date || item.done || !date.startsWith(prefix)) return;
+        out.push({ date, text: item.text, zone: zoneId, parent: parent || null });
+    }
+
+    /**
+     * 日历下方事件列表：⚠ 本月截止任务（按日期升序，过期标红）+ 📌 本月备注。
+     * memoEditing 非空时顶部出备注输入框；两者皆空且无输入框时显示占位提示。
+     */
+    function calEventsHTML(y, m) {
+        const prefix = y + "-" + pad2(m + 1) + "-";
+        const dues = [];
+        const memos = [];
+        for (const zone of svc.ZONES) {
+            if (zone.id === "done") continue;
+            for (const t of (state.zones[zone.id] || [])) {
+                collectDue(dues, t, t.dueDate, zone.id, prefix, null);
+                for (const s of (t.subs || [])) collectDue(dues, s, s.dueDate, zone.id, prefix, t);
+            }
+        }
+        for (const memo of (state.memos || [])) {
+            if (memo.date && memo.date.startsWith(prefix)) memos.push(memo);
+        }
+        dues.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+        memos.sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+
+        let html = '<div class="pos-cal-ev">';
+        if (memoEditing && memoEditing.startsWith(prefix)) {
+            html += '<div class="pos-cal-ev-edit"><input class="pos-add-input" data-memo-input '
+                + 'placeholder="' + memoEditing + ' 的备注，Enter 保存 / Esc 取消"></div>';
+        }
+        if (dues.length) {
+            html += '<div class="pos-cal-ev-head">⚠ 截止任务</div>';
+            html += dues.map(x => {
+                const overdue = x.date < TODAY;
+                const where = x.parent ? esc(x.parent.text) + " · " : "";
+                return '<div class="pos-cal-ev-row' + (overdue ? " pos-overdue" : "") + '">'
+                    + '<span class="pos-ev-date">' + x.date.slice(5) + "</span>"
+                    + '<span class="pos-ev-tx">' + where + esc(x.text) + "</span>"
+                    + '<span class="pos-ev-zone">' + esc(zoneName(x.zone)) + "</span></div>";
+            }).join("");
+        }
+        if (memos.length) {
+            html += '<div class="pos-cal-ev-head">📌 备注</div>';
+            html += memos.map(memo =>
+                '<div class="pos-cal-ev-row pos-memo-row">'
+                + '<span class="pos-ev-date">' + memo.date.slice(5) + "</span>"
+                + '<span class="pos-ev-tx">' + esc(memo.text) + "</span>"
+                + '<span class="pos-del pos-del-sm" data-delmemo="' + esc(memo.id) + '" title="删除备注">×</span></div>'
+            ).join("");
+        }
+        if (!dues.length && !memos.length && !memoEditing) {
+            html += '<div class="pos-cal-ev-empty">本月暂无截止任务或备注 · 双击日期可添加备注</div>';
+        }
+        return html + "</div>";
     }
 
     /** 变体 D 全量布局（翻译自原型 renderD） */
@@ -344,6 +451,68 @@
         commit([hit.zone]);
         render();
         toast("已删除子任务");
+    }
+
+    /* ── 日历备注（Memo）增删 ────────────────────────────────────────── */
+
+    /** 保存某日期的备注（新建 or 追加）；空文字忽略 */
+    function addMemo(date, text) {
+        const trimmed = String(text || "").trim();
+        if (!date || !trimmed) return;
+        state.memos.push({ id: svc.taskId(), date, text: trimmed });
+        svc.saveMemos(state.memos).catch(err => {
+            console.error("[MyTask-OS] 备注写盘失败", err);
+            toast("保存失败：备注写入出错");
+        });
+        render();
+        toast("已添加 " + date + " 的备注");
+    }
+
+    /** 删除备注（按内存 id），整文件重写 */
+    function deleteMemo(id) {
+        const idx = (state.memos || []).findIndex(m => m.id === id);
+        if (idx < 0) return;
+        state.memos.splice(idx, 1);
+        svc.saveMemos(state.memos).catch(err => {
+            console.error("[MyTask-OS] 备注写盘失败", err);
+            toast("保存失败：备注写入出错");
+        });
+        render();
+        toast("已删除备注");
+    }
+
+    /* ── 截止日期设置/清除（Q1-B：界面入口） ────────────────────────── */
+
+    /** 把 📅 截止日期写入任务/子任务（date 为 null = 清除），文字保持不含标记 */
+    function setDue(dragId, date) {
+        const slash = dragId.indexOf("/");
+        let hit, item;
+        if (slash < 0) {
+            hit = findTask(dragId);
+            if (!hit) return;
+            item = hit.task;
+        } else {
+            hit = findTask(dragId.slice(0, slash));
+            if (!hit) return;
+            item = hit.task.subs.find(s => s.id === dragId.slice(slash + 1));
+            if (!item) return;
+        }
+        item.dueDate = (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) ? date : null;
+        commit([hit.zone]);
+        render();
+        toast(item.dueDate ? "截止日期已设为 " + item.dueDate : "已清除截止日期");
+    }
+
+    /** 把 📅+ 设置钮原位换成日期输入框（type=date 带原生选择器，可手输 YYYY-MM-DD） */
+    function promptDueDate(dragId, anchorEl) {
+        const btn = anchorEl || root.querySelector('[data-dueset="' + dragId + '"]');
+        if (!btn) return;
+        const input = document.createElement("input");
+        input.type = "date";
+        input.className = "pos-due-input";
+        input.dataset.dueInput = dragId;
+        btn.replaceWith(input);
+        if (input.focus) input.focus();
     }
 
     /** 应用重命名：改内存态 → 写盘 → 重渲染；折叠键随文字迁移（保住折叠状态） */
@@ -560,6 +729,12 @@
             if (checkSub) { toggleSub(checkSub.dataset.checksub); return; }
             const check = closestEl(e.target, "[data-check]");
             if (check) { toggleTask(check.dataset.check); return; }
+            const delMemoBtn = closestEl(e.target, "[data-delmemo]");
+            if (delMemoBtn) { deleteMemo(delMemoBtn.dataset.delmemo); return; }
+            const dueClear = closestEl(e.target, "[data-dueclear]");
+            if (dueClear) { setDue(dueClear.dataset.dueclear, null); return; }
+            const dueSet = closestEl(e.target, "[data-dueset]");
+            if (dueSet) { promptDueDate(dueSet.dataset.dueset); return; }
             const delSub = closestEl(e.target, "[data-delsub]");
             if (delSub) { deleteSub(delSub.dataset.delsub); return; }
             const delTask = closestEl(e.target, "[data-deltask]");
@@ -656,15 +831,64 @@
         root.addEventListener("keydown", e => {
             const qc = closestEl(e.target, "[data-capto]");
             if (qc && e.key === "Enter") quickcapSubmit();
+            /* 备注输入框：Enter 保存 / Esc 取消（memoEditing 清空后走渲染收尾） */
+            const memoInput = closestEl(e.target, "[data-memo-input]");
+            if (memoInput) {
+                if (e.key === "Enter") {
+                    const date = memoEditing;
+                    const text = memoInput.value.trim();
+                    memoEditing = null;
+                    if (date && text) addMemo(date, text);
+                    else render();
+                } else if (e.key === "Escape") {
+                    memoEditing = null;
+                    render();
+                }
+                return;
+            }
+            /* 截止日期输入框：Enter 校验保存 / Esc 取消 */
+            const dueInput = closestEl(e.target, "[data-due-input]");
+            if (dueInput) {
+                const dragId = dueInput.dataset.dueInput;
+                if (e.key === "Enter") {
+                    const v = dueInput.value.trim();
+                    setDue(dragId, /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+                    if (v && !/^\d{4}-\d{2}-\d{2}$/.test(v)) toast("日期格式应为 YYYY-MM-DD，已取消");
+                } else if (e.key === "Escape") {
+                    render();
+                }
+                return;
+            }
         });
 
-        /* 双击任务/子任务文字 = 行内重命名 */
+        /* 双击任务/子任务文字 = 行内重命名；双击日期格 = 添加该日备注 */
         root.addEventListener("dblclick", e => {
+            const dayCell = closestEl(e.target, "[data-day]");
+            if (dayCell) {
+                memoEditing = dayCell.dataset.day;   // 仅当月格子有 data-day，无需再校验前缀
+                render();
+                const input = root.querySelector("[data-memo-input]");
+                if (input && input.focus) input.focus();
+                return;
+            }
+            const dueSetBtn = closestEl(e.target, "[data-dueset]");
+            if (dueSetBtn) {
+                promptDueDate(dueSetBtn.dataset.dueset, dueSetBtn);
+                return;
+            }
             const tx = closestEl(e.target, ".pos-tx");
             if (!tx) return;
             const row = closestEl(e.target, "[data-drag]");
             if (!row || !row.dataset.drag) return;
             startRename(tx, row.dataset.drag);
+        });
+
+        /* 日期选择器选完即保存（change 不冒泡到委托目标歧义，直接在根上收） */
+        root.addEventListener("change", e => {
+            const dueInput = closestEl(e.target, "[data-due-input]");
+            if (dueInput && dueInput.value) {
+                setDue(dueInput.dataset.dueInput, dueInput.value.trim());
+            }
         });
 
         /* ── 拖拽（原型 wireDndOnce：每分区容器都带 data-zone，
@@ -755,8 +979,8 @@
             root: ROOT ? ROOT + "/" : ""     // service 内部按 root 前缀拼分区文件路径
         });
 
-        /* 页面每次执行先整读六分区文件（手编文件即生效，SPEC §2） */
-        state = { zones: await svc.loadAll() };
+        /* 页面每次执行先整读六分区文件（手编文件即生效，SPEC §2）+ 日历备注 */
+        state = { zones: await svc.loadAll(), memos: await svc.loadMemos() };
 
         /* 背景图：不能用 CSS 相对路径，取 app:// 资源 URL */
         try { heroUrl = app.vault.adapter.getResourcePath(join("工作台内部/Assets/Hero/hero.jpg")); } catch (_) { heroUrl = ""; }

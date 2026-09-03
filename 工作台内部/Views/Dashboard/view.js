@@ -971,7 +971,27 @@
         return hit.path.slice(0, -ANCHOR_FILE.length - 1);
     }
 
+    /**
+     * 自动刷新守卫：Dataview refreshEnabled（默认 2500ms）会在 vault 任何文件变更
+     * （含本视图自己的写盘）后重跑本模块，把整页根元素销毁重建——正在交互的
+     * 日期弹层/输入框/拖拽全被拆掉，表现为页面不断闪跳。
+     * 守卫规则：同一容器内若已有活着的 .pos-dash 根（本视图自己建的、事件还挂着），
+     * 则本次自动刷新直接跳过——页面继续用旧根，不闪。
+     * 手编文件生效路径不受影响：重新打开/切回页面时 Dataview 会重新执行且旧根已随
+     * 视图卸载销毁（容器被清空），守卫不拦；本视图写盘后的数据以内存态为准（事实源），
+     * 也无需重读。
+     */
+    function hasLiveRoot() {
+        return Array.from(dv.container.children).some(child =>
+            child && child.classList && child.classList.contains("pos-dash")
+            && !child.classList.contains("pos-fatal")
+        );
+    }
+
     async function main() {
+        /* 自动刷新重跑：页面还活着就跳过，防闪跳（详见 hasLiveRoot 注释） */
+        if (hasLiveRoot()) { UI.lastSweep = 0; return; }
+
         /* 项目根自定位（文件夹可改名、可放任意深度，即插即用） */
         const ROOT = await locateRoot();
         const join = f => ROOT ? ROOT + "/" + f : f;

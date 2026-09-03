@@ -68,7 +68,9 @@ pre.pos-dash.pos-fatal {
   border-radius: var(--pos-radius);
 }
 
-/* ── 页面背景图两（三）层：图 + 暗化遮罩（SPEC §4.5） ──────────────── */
+/* ── 页面背景图两（三）层：图 + 暗化遮罩（SPEC §4.5） ────────────────
+   attachment: fixed = 图与遮罩相对视口定位（绘制仍裁剪在本元素框内），
+   地球弧线始终钉在屏幕底部；页面拉长或滚动不再露出整片黑底。 */
 .pos-dash .pos-bg-img {
   position: absolute;
   inset: 0;
@@ -76,19 +78,21 @@ pre.pos-dash.pos-fatal {
   background-position: center bottom;
   background-size: cover;
   background-repeat: no-repeat;
+  background-attachment: fixed;
   pointer-events: none;
 }
 .pos-dash .pos-bg-overlay {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: linear-gradient(180deg, rgba(14, 15, 17, .88), rgba(14, 15, 17, .72));
+  background-image: linear-gradient(180deg, rgba(14, 15, 17, .88), rgba(14, 15, 17, .58));
+  background-attachment: fixed;
   pointer-events: none;
 }
 .pos-dash[data-bgmode="none"] .pos-bg-img,
 .pos-dash[data-bgmode="none"] .pos-bg-overlay { display: none; }
 .pos-dash[data-bgmode="solid"] .pos-bg-overlay {
-  background: linear-gradient(180deg, rgba(14, 15, 17, .92), rgba(14, 15, 17, .86));
+  background-image: linear-gradient(180deg, rgba(14, 15, 17, .92), rgba(14, 15, 17, .86));
 }
 
 /* 玻璃卡模式：卡片表面半透明 + 背景模糊（参数同原型 data-bgmode="glass"） */

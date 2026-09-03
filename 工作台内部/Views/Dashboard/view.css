@@ -95,6 +95,32 @@ pre.pos-dash.pos-fatal {
   background-image: linear-gradient(180deg, rgba(14, 15, 17, .92), rgba(14, 15, 17, .86));
 }
 
+/* ── 全页背景 v2：图铺在 Obsidian 滚动容器上 ────────────────────────
+   工作台根 .pos-dash 只到内容底部为止，其下的空白/内边距属于
+   markdown 滚动容器——根内背景层永远盖不到，滚到底必露灰底。
+   故把图直接画在容器上：body:has(.pos-dash) = 仅工作台页生效，
+   切走笔记自动失效；hero URL 由 view.js 写入 --mytaskos-hero。
+   容器层自带暗化渐变保证文字可读；根内 .pos-bg-img 退位（透明），
+   避免与容器层叠出接缝；bgmode=none 时同步关掉容器层。 */
+body:has(.pos-dash) .workspace-leaf-content .view-content,
+body:has(.pos-dash) .markdown-preview-view,
+body:has(.pos-dash) .markdown-source-view.mod-cm6 .cm-scroller {
+  background-image:
+    linear-gradient(180deg, rgba(14, 15, 17, .86), rgba(14, 15, 17, .55)),
+    var(--mytaskos-hero, none);
+  background-position: center bottom, center bottom;
+  background-size: cover, cover;
+  background-repeat: no-repeat, no-repeat;
+  background-attachment: scroll, fixed;
+  background-color: var(--pos-bg, #0e0f11);
+}
+body:has(.pos-dash) .pos-dash .pos-bg-img { opacity: 0; }
+body:has(.pos-dash[data-bgmode="none"]) .workspace-leaf-content .view-content,
+body:has(.pos-dash[data-bgmode="none"]) .markdown-preview-view,
+body:has(.pos-dash[data-bgmode="none"]) .markdown-source-view.mod-cm6 .cm-scroller {
+  background-image: none;
+}
+
 /* 玻璃卡模式：卡片表面半透明 + 背景模糊（参数同原型 data-bgmode="glass"） */
 .pos-dash[data-bgmode="glass"] {
   --pos-surface: rgba(22, 24, 27, .66);

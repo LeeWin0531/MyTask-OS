@@ -760,6 +760,12 @@
 
         /* 背景图：不能用 CSS 相对路径，取 app:// 资源 URL */
         try { heroUrl = app.vault.adapter.getResourcePath(join("工作台内部/Assets/Hero/hero.jpg")); } catch (_) { heroUrl = ""; }
+        /* 背景提升到 Obsidian 滚动容器（view.css 的 :has 规则消费此变量）：
+           工作台根只到内容底部为止，再往下是滚动容器的空白/内边距，
+           根内背景层永远盖不到——图必须铺在容器上，滚到底才是同一张图。 */
+        try {
+            document.documentElement.style.setProperty("--mytaskos-hero", heroUrl ? 'url("' + heroUrl + '")' : "none");
+        } catch (_) { /* 非常规环境忽略 */ }
         bgmode = readBgmode();
 
         /* 根元素：清理同容器旧根（防自动刷新叠加）；dv.view 注入的 <style> 不受影响 */

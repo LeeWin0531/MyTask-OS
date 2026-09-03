@@ -346,6 +346,62 @@
         toast("已删除子任务");
     }
 
+    /** 应用重命名：改内存态 → 写盘 → 重渲染；折叠键随文字迁移（保住折叠状态） */
+    function applyRename(dragId, newText) {
+        const slash = dragId.indexOf("/");
+        if (slash < 0) {
+            const hit = findTask(dragId);
+            if (!hit) { render(); return; }
+            const oldKey = foldKey(hit.zone, hit.task);
+            const wasFolded = collapsed.has(oldKey);
+            hit.task.text = newText;
+            if (wasFolded) { collapsed.delete(oldKey); collapsed.add(foldKey(hit.zone, hit.task)); }
+            commit([hit.zone]);
+            render();
+            toast("已重命名");
+            return;
+        }
+        const hit = findTask(dragId.slice(0, slash));
+        if (!hit) { render(); return; }
+        const sub = hit.task.subs.find(s => s.id === dragId.slice(slash + 1));
+        if (!sub) { render(); return; }
+        sub.text = newText;
+        commit([hit.zone]);
+        render();
+        toast("已重命名子任务");
+    }
+
+    /** 双击文字进入行内编辑：把 .pos-tx 原位换成输入框（不改内存态）。
+     *  Enter / 失焦 = 确认（空文字或未改动则视为取消）；Esc = 撤销。 */
+    function startRename(txSpan, dragId) {
+        const slash = dragId.indexOf("/");
+        const hit = findTask(slash < 0 ? dragId : dragId.slice(0, slash));
+        if (!hit) return;
+        const sub = slash < 0 ? null : (hit.task.subs.find(s => s.id === dragId.slice(slash + 1)) || null);
+        if (slash >= 0 && !sub) return;
+        const current = sub ? sub.text : hit.task.text;
+
+        const input = document.createElement("input");
+        input.className = "pos-rename-input";
+        input.value = current;
+        input.setAttribute("draggable", "false");   // 编辑态禁用行拖拽
+        let finished = false;
+        const finish = text => {
+            if (finished) return;
+            finished = true;
+            if (text && text !== current) applyRename(dragId, text);
+            else render();
+        };
+        input.onkeydown = ev => {
+            if (ev.key === "Enter") { ev.preventDefault(); finish(input.value.trim()); }
+            else if (ev.key === "Escape") { finished = true; render(); }
+        };
+        input.onblur = () => finish(input.value.trim());
+        txSpan.replaceWith(input);
+        input.focus();
+        if (typeof input.select === "function") input.select();
+    }
+
     /** 速记条：Enter / 按钮 → 追加到未安排末尾 + toast（SPEC §3.1） */
     function quickcapSubmit() {
         const qc = root.querySelector("[data-capto]");
@@ -600,6 +656,15 @@
         root.addEventListener("keydown", e => {
             const qc = closestEl(e.target, "[data-capto]");
             if (qc && e.key === "Enter") quickcapSubmit();
+        });
+
+        /* 双击任务/子任务文字 = 行内重命名 */
+        root.addEventListener("dblclick", e => {
+            const tx = closestEl(e.target, ".pos-tx");
+            if (!tx) return;
+            const row = closestEl(e.target, "[data-drag]");
+            if (!row || !row.dataset.drag) return;
+            startRename(tx, row.dataset.drag);
         });
 
         /* ── 拖拽（原型 wireDndOnce：每分区容器都带 data-zone，

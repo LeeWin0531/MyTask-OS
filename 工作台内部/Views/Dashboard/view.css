@@ -274,6 +274,21 @@ pre.pos-dash.pos-fatal {
   text-decoration: line-through;
 }
 
+/* 行内重命名输入框：原位替换 .pos-tx，字号随任务行（顶级 14px/子任务 13px） */
+.pos-dash .pos-rename-input {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 8px;
+  font-size: 14px;
+  font-family: inherit;
+  border: 1.5px solid var(--pos-primary);
+  border-radius: 7px;
+  outline: none;
+  background: var(--pos-surface);
+  color: var(--pos-text);
+}
+.pos-dash .pos-task.pos-sub .pos-rename-input { font-size: 13px; }
+
 .pos-dash .pos-td-date {
   font-size: 10.5px;
   color: var(--pos-muted);

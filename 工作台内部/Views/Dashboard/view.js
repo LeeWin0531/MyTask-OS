@@ -168,14 +168,15 @@
     /* ── 渲染片段（翻译自原型 taskRow / subRow / zoneBody / zoneFoot / zoneCardHTML） ── */
 
     /**
-     * 截止日期芯片：有 📅 时展示（点击清除，过期红色）；没有时悬停出现「日」设置钮。
+     * 截止日期芯片：有 📅 时展示（点击再次打开日期选择框重选，过期红色）；
+     * 没有时悬停出现 📅+ 设置钮（点击直接打开选择框）。
      * dragId 兼容顶级（"taskId"）与子任务（"taskId/subId"）。
      */
     function dueChip(dragId, item) {
         if (item.dueDate) {
             const overdue = !item.done && item.dueDate < TODAY;
-            return '<span class="pos-due-chip' + (overdue ? " pos-due-over" : "") + '" data-dueclear="' + esc(dragId)
-                + '" title="截止 ' + esc(item.dueDate) + '（点击清除）">📅 ' + esc(item.dueDate.slice(5)) + "</span>";
+            return '<span class="pos-due-chip' + (overdue ? " pos-due-over" : "") + '" data-dueset="' + esc(dragId)
+                + '" data-due="' + esc(item.dueDate) + '" title="截止 ' + esc(item.dueDate) + '（点击修改）">📅 ' + esc(item.dueDate.slice(5)) + "</span>";
         }
         return '<span class="pos-dueset" data-dueset="' + esc(dragId) + '" title="设置截止日期">📅+</span>';
     }
@@ -503,16 +504,21 @@
         toast(item.dueDate ? "截止日期已设为 " + item.dueDate : "已清除截止日期");
     }
 
-    /** 把 📅+ 设置钮原位换成日期输入框（type=date 带原生选择器，可手输 YYYY-MM-DD） */
-    function promptDueDate(dragId, anchorEl) {
+    /** 把 📅 芯片/设置钮原位换成日期选择框（type=date 原生弹层；预填当前截止日） */
+    function promptDueDate(dragId, anchorEl, currentDate) {
         const btn = anchorEl || root.querySelector('[data-dueset="' + dragId + '"]');
         if (!btn) return;
         const input = document.createElement("input");
         input.type = "date";
         input.className = "pos-due-input";
         input.dataset.dueInput = dragId;
+        if (currentDate) input.value = currentDate;   // 已有截止时预填，方便改期
         btn.replaceWith(input);
         if (input.focus) input.focus();
+        /* 派发 click 让 Chromium/WebView 立即展开原生日历弹层（showPicker 兼容时优先） */
+        try {
+            if (typeof input.showPicker === "function" && anchorEl) input.showPicker();
+        } catch (_) { /* 需要用户手势的旧内核忽略：用户点击输入框仍会弹 */ }
     }
 
     /** 应用重命名：改内存态 → 写盘 → 重渲染；折叠键随文字迁移（保住折叠状态） */
@@ -731,10 +737,8 @@
             if (check) { toggleTask(check.dataset.check); return; }
             const delMemoBtn = closestEl(e.target, "[data-delmemo]");
             if (delMemoBtn) { deleteMemo(delMemoBtn.dataset.delmemo); return; }
-            const dueClear = closestEl(e.target, "[data-dueclear]");
-            if (dueClear) { setDue(dueClear.dataset.dueclear, null); return; }
             const dueSet = closestEl(e.target, "[data-dueset]");
-            if (dueSet) { promptDueDate(dueSet.dataset.dueset); return; }
+            if (dueSet) { promptDueDate(dueSet.dataset.dueset, dueSet, dueSet.dataset.due || null); return; }
             const delSub = closestEl(e.target, "[data-delsub]");
             if (delSub) { deleteSub(delSub.dataset.delsub); return; }
             const delTask = closestEl(e.target, "[data-deltask]");
@@ -873,7 +877,7 @@
             }
             const dueSetBtn = closestEl(e.target, "[data-dueset]");
             if (dueSetBtn) {
-                promptDueDate(dueSetBtn.dataset.dueset, dueSetBtn);
+                promptDueDate(dueSetBtn.dataset.dueset, dueSetBtn, dueSetBtn.dataset.due || null);
                 return;
             }
             const tx = closestEl(e.target, ".pos-tx");
@@ -886,8 +890,10 @@
         /* 日期选择器选完即保存（change 不冒泡到委托目标歧义，直接在根上收） */
         root.addEventListener("change", e => {
             const dueInput = closestEl(e.target, "[data-due-input]");
-            if (dueInput && dueInput.value) {
-                setDue(dueInput.dataset.dueInput, dueInput.value.trim());
+            if (dueInput) {
+                const v = dueInput.value.trim();
+                /* 选了日期 = 设置/改期；清空选择框 = 清除截止日期 */
+                setDue(dueInput.dataset.dueInput, v || null);
             }
         });
 

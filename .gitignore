@@ -1,0 +1,6 @@
+# Obsidian 本地配置（每台机器/每个库各不相同，不入库）
+.obsidian/
+
+# 系统杂物
+Thumbs.db
+.DS_Store

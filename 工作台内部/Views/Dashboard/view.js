@@ -196,9 +196,10 @@
         const prog = (task.subs.length && !task.done)
             ? '<span class="pos-prog">' + task.subs.filter(s => s.done).length + "/" + task.subs.length + "</span>"
             : "";
+        // 无子任务也渲染空 caret 占位：否则有子任务的行会被箭头推右，各行勾选框/文字不在同一列
         const caret = task.subs.length
             ? '<span class="pos-caret" data-fold="' + esc(task.id) + '">' + (collapsed.has(foldKey(zoneId, task)) ? "▶" : "▼") + "</span>"
-            : "";
+            : '<span class="pos-caret"></span>';
         const plus = '<span class="pos-subplus" data-addsub="' + esc(task.id) + '" title="添加子任务">＋子任务</span>';
         const del = '<span class="pos-del" data-deltask="' + esc(task.id) + '" title="删除任务">×</span>';
         const due = inDone ? "" : dueChip(task.id, task);
